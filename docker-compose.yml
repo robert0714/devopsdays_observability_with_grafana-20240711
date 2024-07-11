@@ -1,0 +1,183 @@
+x-logging: &default-logging
+  driver: loki
+  options:
+    loki-url: 'http://localhost:3100/api/prom/push'
+    loki-pipeline-stages: |
+      - json:
+          expressions:
+            level: level
+      - regex:
+          expression: '^(?P<time>\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2},d{3}) (?P<message>(?s:.*))$$'
+      - labels:
+          level:
+
+x-golang-demo-app: &demo-app
+  build: ./demo
+  ports:
+      - "8081:8080"
+  networks:
+      - backend
+  environment: &demo-env
+      GIN_MODE: release
+      OTEL_EXPORTER_JAEGER_ENDPOINT: "http://otel_collector:14268/api/traces"
+  logging: *default-logging
+
+
+version: '3.8'
+
+networks:
+  backend:
+
+services:
+  ## Demo applications
+  person-1:
+    container_name: person-1
+    <<: *demo-app
+    ports:
+      - "8081:8080"
+    environment:
+      <<: *demo-env
+      SERVICE_NAME: "person-1"
+      PERSON_LIST: "person-2,person-3,person-4"
+      CONSIDERATION_TIME_MILLISECONDS: 150
+
+  person-2:
+    container_name: person-2
+    <<: *demo-app
+    ports:
+      - "8082:8080"
+    environment:
+      <<: *demo-env
+      SERVICE_NAME: "person-2"
+      PERSON_LIST: "person-1,person-3,person-4"
+      CONSIDERATION_TIME_MILLISECONDS: 200
+
+  person-3:
+    container_name: person-3
+    <<: *demo-app
+    ports:
+      - "8083:8080"
+    environment:
+      <<: *demo-env
+      SERVICE_NAME: "person-3"
+      PERSON_LIST: "person-1,person-2,person-4"
+      CONSIDERATION_TIME_MILLISECONDS: 50
+
+  person-4:
+    container_name: person-4
+    <<: *demo-app
+    ports:
+      - "8084:8080"
+    environment:
+      <<: *demo-env
+      SERVICE_NAME: "person-4"
+      PERSON_LIST: "person-1,person-2,person-3"
+      CONSIDERATION_TIME_MILLISECONDS: 300
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.48.1
+    command:
+      - --web.enable-remote-write-receiver
+      - --enable-feature=native-histograms
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - backend
+    ports:
+      - "9090:9090"
+    logging: *default-logging
+
+  otel_collector:
+    container_name: otel_collector
+    image: otel/opentelemetry-collector-contrib:0.91.0
+    networks:
+      - backend
+    volumes:
+      - ./config/opentelemetry-collector/otel-collector-config.yaml:/conf/config.yaml
+    ports:
+      - "14250:14250"
+      - "14268:14268"
+      - "55679:55679"
+    command:
+      - "--config=/conf/config.yaml"
+    restart: on-failure
+    logging: *default-logging
+
+  ## Observability Servers
+  pyroscope:
+    container_name: pyroscope
+    image: grafana/pyroscope:1.5.0
+    networks:
+      - backend
+    ports:
+      - "4040:4040"
+    command: ["server"]
+    logging: *default-logging
+
+  loki:
+    container_name: loki
+    image: grafana/loki:3.0.0
+    networks:
+      - backend
+    volumes:
+      - ./config/loki/loki-config.yml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    environment:
+      LOG_CLUSTER_DEPTH: '8'
+      LOG_SIM_TH: '0.3'
+    ports:
+      - "3100:3100"
+
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:11.0.1
+    networks:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+      - GF_INSTALL_PLUGINS=https://storage.googleapis.com/integration-artifacts/grafana-lokiexplore-app/grafana-lokiexplore-app-latest.zip;grafana-lokiexplore-app
+    volumes:
+      - ./config/grafana/config:/etc/grafana
+      - ./config/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./config/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./config/grafana/plugins:/etc/grafana/provisioning/plugins
+      - ./config/grafana/img:/usr/share/grafana/public/img/devopsdays
+    logging: *default-logging
+
+  mimir:
+    container_name: mimir
+    image: grafana/mimir:2.12.0
+    networks:
+      - backend
+    volumes:
+      - ./config/mimir/:/etc/mimir-config
+    entrypoint:
+      - /bin/mimir
+      - -config.file=/etc/mimir-config/mimir.yaml
+    ports:
+      - "9095:9095"
+      - "8080"
+      - "9009:9009"
+    logging: *default-logging
+
+  tempo:
+    container_name: tempo
+    image: grafana/tempo:2.4.1
+    networks:
+      - backend
+    environment:
+      - GRPC_TRACE=api
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./config/tempo/tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    logging: *default-logging

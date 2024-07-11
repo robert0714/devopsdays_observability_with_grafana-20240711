@@ -1,0 +1,7 @@
+multitenancy_enabled: true
+target: all
+ingester:
+  ring:
+    replication_factor: 1
+server:
+  log_level: debug

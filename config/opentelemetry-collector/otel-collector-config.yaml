@@ -1,0 +1,82 @@
+exporters:
+  debug: {}
+  file:
+    path: /dev/null
+  otlphttp:
+    endpoint: http://tempo:4318
+    headers:
+      X-Scope-OrgID: placeholder
+extensions:
+  health_check:
+    endpoint: otel_collector:13133
+  zpages:
+    endpoint: 0.0.0.0:55679
+processors:
+  batch:
+    send_batch_max_size: 11000
+    send_batch_size: 10000
+    timeout: 10s
+  filter/exclude-prometheus-exporter:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.route"] == "/metrics"'
+        - 'attributes["http.url"] == "/metrics"'
+
+
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+receivers:
+  jaeger:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:14250
+      thrift_compact:
+        endpoint: 0.0.0.0:6831
+      thrift_http:
+        endpoint: 0.0.0.0:14268
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  zipkin:
+    endpoint: 0.0.0.0:9411
+service:
+  extensions:
+    - health_check
+    - zpages
+  pipelines:
+    logs:
+      exporters:
+        - file
+      processors:
+        - memory_limiter
+        - batch
+      receivers:
+        - otlp
+    metrics:
+      exporters:
+        - file
+      processors:
+        - memory_limiter
+        - batch
+      receivers:
+        - otlp
+    traces:
+      exporters:
+        - otlphttp
+        - debug
+      processors:
+        - memory_limiter
+        - batch
+#        - filter/exclude-prometheus-exporter
+      receivers:
+        - otlp
+        - jaeger
+  telemetry:
+    metrics:
+      address: otel_collector:8889

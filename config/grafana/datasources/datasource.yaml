@@ -1,0 +1,63 @@
+# For configuration options, see
+#   https://grafana.com/docs/grafana/latest/administration/provisioning/#example-data-source-config-file
+
+apiVersion: 1
+
+datasources: # LGTM
+  - name: Grafana Loki
+    type: loki
+    uid: loki
+    url: http://loki:3100
+    secureJsonData:
+      httpHeaderValue1: 'placeholder'
+    jsonData:
+      httpMethod: GET
+      httpHeaderName1: 'X-Scope-Orgid'
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: "\"trace-id\":\"0*([1-9a-f][0-9a-f]*)\""
+          name: TraceID
+          url: '$${__value.raw}'
+          urlDisplayLabel: 'View Trace'
+
+  - name: Grafana Tempo
+    type: tempo
+    orgId: 1
+    url: http://tempo:3200
+    editable: false
+    uid: tempo
+    secureJsonData:
+      httpHeaderValue1: 'placeholder'
+    jsonData:
+      httpMethod: GET
+      tracesToMetrics:
+        datasourceUid: mimir
+      serviceMap:
+        datasourceUid: mimir
+      httpHeaderName1: 'X-Scope-Orgid'
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-2m'
+        spanEndTimeShift: '2m'
+        # For local docker-compose deployments, use the following configuration
+        tags: [{ key: 'service.name', value: 'compose_service' }]
+        # For Kubernetes deployments, use the following configuration
+        # tags: [{ key: 'service.name', value: 'container' }]
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: false
+
+  - name: Grafana Pyroscope
+    type: grafana-pyroscope-datasource
+    url: http://pyroscope:4040
+    jsonData:
+      minStep: '15s'
+  - name: Grafana Mimir
+    type: prometheus
+    url: http://mimir:8080/prometheus
+    uid: mimir
+    jsonData:
+      minStep: '15s'
+      httpHeaderName1: 'X-Scope-Orgid'
+    secureJsonData:
+      httpHeaderValue1: 'placeholder'

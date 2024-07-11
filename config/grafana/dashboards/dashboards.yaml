@@ -1,0 +1,16 @@
+# For configuration options, see
+#   https://grafana.com/docs/grafana/latest/administration/provisioning/#dashboards
+
+apiVersion: 1
+
+providers:
+  # We're defining a directory from which to load file-based dashboards
+  - name: 'default'
+    type: file
+    folder: 'DevopsDays 2024'
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+

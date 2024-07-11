@@ -1,0 +1,26 @@
+global:
+  scrape_interval:     10s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 10s # Evaluate rules every 15 seconds. The default is every 1 minute.
+
+  external_labels:
+    env: local
+
+remote_write:
+  - url: http://mimir:8080/api/v1/push
+    remote_timeout: 10s
+    headers:
+      X-Scope-OrgID: placeholder
+
+scrape_configs:
+  - job_name: aggregated-trace-metrics
+    static_configs:
+      - targets: ['otel_collector:8889']
+  - job_name: ikala-lunch-metrics
+    scrape_interval: 1s # For demo purposes
+    static_configs:
+      - targets: [
+        'person-1:8080',
+        'person-2:8080',
+        'person-3:8080',
+        'person-4:8080',
+      ]
